@@ -23,9 +23,9 @@ test('normalizeEmail lowercases and trims', () => {
 });
 
 test('generateReferralCode returns valid non-empty codes with optional prefix', () => {
-  const codeWithName = generateReferralCode('Maya');
+  const codeWithName = generateReferralCode('Alex');
   assert.equal(codeWithName.length, 8);
-  assert.equal(codeWithName.startsWith('MAYA'), true);
+  assert.equal(codeWithName.startsWith('ALEX'), true);
 
   const codeWithoutName = generateReferralCode();
   assert.equal(codeWithoutName.length, 8);

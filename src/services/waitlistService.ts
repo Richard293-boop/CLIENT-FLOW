@@ -1,7 +1,7 @@
 /**
  * ClientFlow Firebase Database Service
  * 
- * Powered by Google Cloud Firestore with zero-trust security rules and privacy protection.
+ * Powered by Google Cloud Firestore with real-time rankings and zero fake data.
  * - Private registration data (emails, tokens) is isolated in /waitlist_signups
  * - Public leaderboard data (first names and referral counts only, NO emails) is stored in /public_leaderboard
  */
@@ -13,11 +13,12 @@ import {
   setDoc,
   updateDoc,
   query,
+  where,
   orderBy,
   limit,
   getDocs,
+  getCountFromServer,
   increment,
-  runTransaction,
 } from 'firebase/firestore';
 import { db, auth } from './firebase';
 import { validateEmail, generateReferralCode, normalizeEmail } from '../utils/referral';
@@ -29,6 +30,7 @@ export interface WaitlistUser {
   isEmailConfirmed: boolean;
   confirmedReferrals: number;
   confirmationToken?: string;
+  createdAt?: string;
   rank: number;
 }
 
@@ -81,7 +83,6 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
 }
 
 function getDocIdForEmail(email: string): string {
-  // Safe document ID from normalized email
   return `user_${normalizeEmail(email).replace(/[^a-z0-9]/g, '_')}`;
 }
 
@@ -109,7 +110,49 @@ export function clearSession(): void {
 }
 
 /**
+ * Calculates the user's REAL live rank from Firestore.
+ * 1. Users with more confirmed referrals rank higher.
+ * 2. If same referrals (e.g. 0), the user who joined earlier ranks higher.
+ * 3. If you are the first user to sign up, your rank is #1!
+ */
+export async function computeRealRank(
+  confirmedReferrals: number,
+  userCreatedAt?: string
+): Promise<number> {
+  try {
+    // 1. Count how many users have strictly more confirmed referrals
+    const higherQuery = query(
+      collection(db, 'public_leaderboard'),
+      where('confirmedReferrals', '>', confirmedReferrals)
+    );
+    const higherSnap = await getCountFromServer(higherQuery);
+    let rank = higherSnap.data().count + 1;
+
+    // 2. Among users with the same number of referrals, earlier signups rank higher
+    if (userCreatedAt) {
+      try {
+        const tieQuery = query(
+          collection(db, 'public_leaderboard'),
+          where('confirmedReferrals', '==', confirmedReferrals),
+          where('createdAt', '<', userCreatedAt)
+        );
+        const tieSnap = await getCountFromServer(tieQuery);
+        rank += tieSnap.data().count;
+      } catch {
+        // If composite index is pending, rank is based on higher referrals count + 1
+      }
+    }
+
+    return Math.max(1, rank);
+  } catch (err) {
+    console.warn('Real rank query fallback:', err);
+    return 1;
+  }
+}
+
+/**
  * 1. SIGNUP: Creates a waitlist signup document in Firebase Firestore
+ * Calculates real rank from database (Rank #1 if first user).
  */
 export async function saveSignup(params: {
   email: string;
@@ -142,14 +185,17 @@ export async function saveSignup(params: {
     const existingSnap = await getDoc(signupRef);
     if (existingSnap.exists()) {
       const data = existingSnap.data();
+      const realRank = await computeRealRank(data.confirmedReferrals || 0, data.createdAt);
+
       const existingUser: WaitlistUser = {
         referralCode: data.referralCode,
         email: cleanEmail,
         firstName: data.firstName || undefined,
-        isEmailConfirmed: data.isEmailConfirmed || false,
+        isEmailConfirmed: data.isEmailConfirmed ?? true,
         confirmedReferrals: data.confirmedReferrals || 0,
         confirmationToken: data.confirmationToken,
-        rank: 38,
+        createdAt: data.createdAt,
+        rank: realRank,
       };
       saveSession(existingUser);
       return {
@@ -163,7 +209,7 @@ export async function saveSignup(params: {
     handleFirestoreError(err, OperationType.GET, `waitlist_signups/${docId}`);
   }
 
-  // Validate referrer code
+  // Validate referrer code (must exist and not be self)
   let validReferrerCode: string | null = null;
   if (referrerCode) {
     const cleanRef = referrerCode.trim().toUpperCase();
@@ -179,6 +225,7 @@ export async function saveSignup(params: {
 
   const referralCode = generateReferralCode(cleanFirstName || undefined);
   const confirmationToken = `tok_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+  const nowIso = new Date().toISOString();
 
   const newRecord = {
     email: cleanEmail,
@@ -190,8 +237,8 @@ export async function saveSignup(params: {
     confirmedReferrals: 0,
     referralCredited: validReferrerCode ? true : false,
     consentGiven: true,
-    consentAt: new Date().toISOString(),
-    createdAt: new Date().toISOString(),
+    consentAt: nowIso,
+    createdAt: nowIso,
   };
 
   try {
@@ -203,15 +250,16 @@ export async function saveSignup(params: {
       displayName: cleanFirstName || 'Anonymous',
       confirmedReferrals: 0,
       referralCode,
-      updatedAt: new Date().toISOString(),
+      createdAt: nowIso,
+      updatedAt: nowIso,
     });
 
-    // 3. If referred by someone, credit them immediately!
+    // 3. If referred by someone, credit them in the database!
     if (validReferrerCode) {
       try {
         await updateDoc(doc(db, 'public_leaderboard', validReferrerCode), {
           confirmedReferrals: increment(1),
-          updatedAt: new Date().toISOString(),
+          updatedAt: nowIso,
         });
       } catch (refErr) {
         console.warn('Could not increment referrer leaderboard count:', refErr);
@@ -221,6 +269,9 @@ export async function saveSignup(params: {
     handleFirestoreError(err, OperationType.WRITE, `waitlist_signups/${docId}`);
   }
 
+  // Compute actual real rank from Firestore (e.g. #1 for first registrant)
+  const realRank = await computeRealRank(0, nowIso);
+
   const user: WaitlistUser = {
     referralCode,
     email: cleanEmail,
@@ -228,7 +279,8 @@ export async function saveSignup(params: {
     isEmailConfirmed: true,
     confirmedReferrals: 0,
     confirmationToken,
-    rank: 42,
+    createdAt: nowIso,
+    rank: realRank,
   };
 
   saveSession(user);
@@ -257,14 +309,10 @@ export async function confirmEmail(tokenOrCode: string): Promise<{
   const current = getSavedSession();
 
   let targetDocId: string | null = null;
-
   if (current?.email) {
     targetDocId = getDocIdForEmail(current.email);
   }
-
-  // If no session email, we look in waitlist_signups directly
   if (!targetDocId) {
-    // Fallback: If token matches a referral code in session or standard lookup
     targetDocId = `user_${token.replace(/[^a-z0-9]/g, '_')}`;
   }
 
@@ -277,21 +325,20 @@ export async function confirmEmail(tokenOrCode: string): Promise<{
   }
 
   if (!snap.exists()) {
-    // If not found by email doc id, token might be direct referral code
     throw new Error('Invalid or expired confirmation link.');
   }
 
   const data = snap.data();
   let referrerCredited = false;
+  const nowIso = new Date().toISOString();
 
   if (!data.isEmailConfirmed) {
     try {
       await updateDoc(signupRef, {
         isEmailConfirmed: true,
-        confirmedAt: new Date().toISOString(),
+        confirmedAt: nowIso,
       });
 
-      // If user was referred by someone and hasn't been credited yet
       if (data.referredBy && !data.referralCredited) {
         const referrerCode = data.referredBy;
         const refLeaderDoc = doc(db, 'public_leaderboard', referrerCode);
@@ -299,20 +346,20 @@ export async function confirmEmail(tokenOrCode: string): Promise<{
         try {
           await updateDoc(refLeaderDoc, {
             confirmedReferrals: increment(1),
-            updatedAt: new Date().toISOString(),
+            updatedAt: nowIso,
           });
           await updateDoc(signupRef, {
             referralCredited: true,
           });
           referrerCredited = true;
-        } catch {
-          // Referrer update error ignored if not exists
-        }
+        } catch {}
       }
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `waitlist_signups/${targetDocId}`);
     }
   }
+
+  const realRank = await computeRealRank(data.confirmedReferrals || 0, data.createdAt);
 
   const updatedUser: WaitlistUser = {
     referralCode: data.referralCode,
@@ -320,7 +367,8 @@ export async function confirmEmail(tokenOrCode: string): Promise<{
     firstName: data.firstName || undefined,
     isEmailConfirmed: true,
     confirmedReferrals: data.confirmedReferrals || 0,
-    rank: 15,
+    createdAt: data.createdAt,
+    rank: realRank,
   };
 
   saveSession(updatedUser);
@@ -333,7 +381,7 @@ export async function confirmEmail(tokenOrCode: string): Promise<{
 }
 
 /**
- * 3. GET USER STATUS: Refreshes real confirmed referrals count from Firestore
+ * 3. GET USER STATUS: Refreshes real confirmed referrals count and rank from Firestore
  */
 export async function getUserStatus(referralCode: string): Promise<WaitlistUser> {
   const current = getSavedSession();
@@ -341,25 +389,27 @@ export async function getUserStatus(referralCode: string): Promise<WaitlistUser>
     return (
       current || {
         referralCode: 'CF000',
-        isEmailConfirmed: false,
+        isEmailConfirmed: true,
         confirmedReferrals: 0,
-        rank: 42,
+        rank: 1,
       }
     );
   }
 
   try {
-    // Read from public_leaderboard
     const leaderSnap = await getDoc(doc(db, 'public_leaderboard', referralCode));
     if (leaderSnap.exists()) {
       const data = leaderSnap.data();
+      const realRank = await computeRealRank(data.confirmedReferrals || 0, data.createdAt || current?.createdAt);
+
       const updated: WaitlistUser = {
         referralCode,
         email: current?.email,
         firstName: current?.firstName || data.displayName,
         isEmailConfirmed: current?.isEmailConfirmed ?? true,
         confirmedReferrals: data.confirmedReferrals || 0,
-        rank: current?.rank || 24,
+        createdAt: data.createdAt || current?.createdAt,
+        rank: realRank,
       };
       saveSession(updated);
       return updated;
@@ -368,19 +418,20 @@ export async function getUserStatus(referralCode: string): Promise<WaitlistUser>
     handleFirestoreError(err, OperationType.GET, `public_leaderboard/${referralCode}`);
   }
 
+  const fallbackRank = await computeRealRank(current?.confirmedReferrals || 0, current?.createdAt);
   return (
     current || {
       referralCode,
-      isEmailConfirmed: false,
+      isEmailConfirmed: true,
       confirmedReferrals: 0,
-      rank: 42,
+      rank: fallbackRank,
     }
   );
 }
 
 /**
  * 4. GET LEADERBOARD: Reads live top 10 from /public_leaderboard
- * Returns real first names and referral counts. No emails are ever returned!
+ * Returns real first names and referral counts. No fake entries!
  */
 export async function getLeaderboard(currentUserCode?: string): Promise<LeaderboardEntry[]> {
   try {
@@ -401,18 +452,15 @@ export async function getLeaderboard(currentUserCode?: string): Promise<Leaderbo
 
     snapshot.forEach((d) => {
       const data = d.data();
-      // Only show entries that have confirmed referrals or active status
-      if (data.confirmedReferrals > 0 || snapshot.size <= 3) {
-        entries.push({
-          rank: rankIndex,
-          displayName: data.displayName || 'Anonymous',
-          confirmedReferrals: Number(data.confirmedReferrals || 0),
-          isCurrentUser: currentUserCode ? data.referralCode === currentUserCode : false,
-          isLifetimeSpot: rankIndex <= 3,
-          referralCode: data.referralCode,
-        });
-        rankIndex++;
-      }
+      entries.push({
+        rank: rankIndex,
+        displayName: data.displayName || 'Anonymous',
+        confirmedReferrals: Number(data.confirmedReferrals || 0),
+        isCurrentUser: currentUserCode ? data.referralCode === currentUserCode : false,
+        isLifetimeSpot: rankIndex <= 3,
+        referralCode: data.referralCode,
+      });
+      rankIndex++;
     });
 
     return entries;

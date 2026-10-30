@@ -46,8 +46,8 @@ export const LeaderboardSection: React.FC<LeaderboardSectionProps> = ({
           </div>
         ) : (
           <>
-            {/* Top 3 Highlight Cards */}
-            {entries.length >= 3 && (
+            {/* Top Highlight Cards */}
+            {entries.length > 0 && (
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
                 {entries.slice(0, 3).map((topEntry, idx) => {
                   const placeTitles = ['1st Place', '2nd Place', '3rd Place'];
