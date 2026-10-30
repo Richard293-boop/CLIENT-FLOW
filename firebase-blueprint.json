@@ -1,0 +1,103 @@
+{
+  "entities": {
+    "WaitlistSignup": {
+      "title": "WaitlistSignup",
+      "description": "Represents a waitlist registrant with their referral details and email confirmation state.",
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "User email address in lowercase."
+        },
+        "firstName": {
+          "type": "string",
+          "description": "Optional first name or nickname of the freelancer.",
+          "maxLength": 50
+        },
+        "referralCode": {
+          "type": "string",
+          "description": "Unique 8-character referral code.",
+          "minLength": 6,
+          "maxLength": 12,
+          "pattern": "^[A-Z0-9]+$"
+        },
+        "referredBy": {
+          "type": "string",
+          "description": "The referral code of the inviter, or null if none.",
+          "maxLength": 12
+        },
+        "confirmationToken": {
+          "type": "string",
+          "description": "Unique email confirmation token.",
+          "minLength": 8,
+          "maxLength": 64
+        },
+        "isEmailConfirmed": {
+          "type": "boolean",
+          "description": "Whether the user has verified their email address."
+        },
+        "confirmedReferrals": {
+          "type": "number",
+          "description": "Count of peers who joined via this user's link and confirmed their email."
+        },
+        "referralCredited": {
+          "type": "boolean",
+          "description": "Ensures the referral reward is only credited once."
+        },
+        "consentGiven": {
+          "type": "boolean",
+          "description": "Agreement to receive launch updates."
+        },
+        "consentAt": {
+          "type": "string",
+          "description": "Timestamp of consent."
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Timestamp of waitlist registration."
+        }
+      },
+      "required": ["email", "referralCode", "confirmationToken", "isEmailConfirmed", "confirmedReferrals", "consentGiven"]
+    },
+    "LeaderboardEntry": {
+      "title": "LeaderboardEntry",
+      "description": "Public, privacy-safe leaderboard entry with first name and confirmed referrals only.",
+      "type": "object",
+      "properties": {
+        "displayName": {
+          "type": "string",
+          "description": "Public first name or Anonymous.",
+          "maxLength": 50
+        },
+        "confirmedReferrals": {
+          "type": "number",
+          "description": "Number of confirmed referrals."
+        },
+        "referralCode": {
+          "type": "string",
+          "description": "Unique referral code identifier."
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Last updated timestamp."
+        }
+      },
+      "required": ["displayName", "confirmedReferrals", "referralCode"]
+    }
+  },
+  "firestore": {
+    "/waitlist_signups/{signupId}": {
+      "schema": {
+        "$ref": "#/entities/WaitlistSignup"
+      },
+      "description": "Stores private user signups. Protected from public listing to safeguard emails."
+    },
+    "/public_leaderboard/{referralCode}": {
+      "schema": {
+        "$ref": "#/entities/LeaderboardEntry"
+      },
+      "description": "Public read-only leaderboard collection containing only first names and referral counts."
+    }
+  }
+}

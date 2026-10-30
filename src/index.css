@@ -1,0 +1,18 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --color-brand-50: #f2f8ff;
+  --color-brand-100: #e2f0fe;
+  --color-brand-200: #bfe1fd;
+  --color-brand-300: #88c8fc;
+  --color-brand-400: #4DA3FF;
+  --color-brand-500: #2a88f5;
+  --color-brand-600: #1469d8;
+  --color-brand-700: #1053ae;
+}
+
+html {
+  scroll-behavior: smooth;
+  font-family: var(--font-sans);
+}

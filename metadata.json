@@ -1,0 +1,6 @@
+{
+  "name": "ClientFlow - AI Client-Ops for Freelancers",
+  "description": "ClientFlow handles routine client work automatically and escalates sensitive matters, so freelancers spend more time doing the work and less time managing clients.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

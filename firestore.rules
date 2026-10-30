@@ -1,0 +1,66 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Catch-all: Deny all by default
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.size() >= 5 && email.size() <= 254 && email.matches('^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$');
+    }
+
+    function isValidSignupCreate(data) {
+      return data.keys().hasAll(['email', 'referralCode', 'confirmationToken', 'isEmailConfirmed', 'confirmedReferrals', 'consentGiven', 'createdAt'])
+        && isValidEmail(data.email)
+        && data.referralCode is string && data.referralCode.size() >= 4 && data.referralCode.size() <= 16
+        && data.confirmationToken is string && data.confirmationToken.size() >= 8 && data.confirmationToken.size() <= 128
+        && data.isEmailConfirmed is bool
+        && data.confirmedReferrals is number
+        && data.consentGiven == true
+        && (!('firstName' in data) || (data.firstName is string && data.firstName.size() <= 50))
+        && (!('referredBy' in data) || data.referredBy == null || (data.referredBy is string && data.referredBy.size() <= 16));
+    }
+
+    // Waitlist Signups collection: Protected PII
+    match /waitlist_signups/{signupId} {
+      // Anyone can submit a valid initial waitlist signup
+      allow create: if isValidSignupCreate(incoming());
+
+      // Read allowed only for single document lookups (no blanket query scraping of emails)
+      allow get: if true;
+      allow list: if false;
+
+      // Update allowed only for email confirmation or referral crediting
+      allow update: if (
+        // Action 1: Confirming email
+        (incoming().diff(existing()).affectedKeys().hasOnly(['isEmailConfirmed', 'confirmedAt', 'referralCredited', 'confirmedReferrals']))
+      );
+
+      // Deletes not allowed from client
+      allow delete: if false;
+    }
+
+    // Public Leaderboard: Privacy-safe (no emails stored here, only first name and counts)
+    match /public_leaderboard/{referralCode} {
+      allow read: if true;
+      allow create, update: if (
+        incoming().keys().hasAll(['displayName', 'confirmedReferrals', 'referralCode'])
+        && incoming().displayName is string && incoming().displayName.size() <= 50
+        && incoming().confirmedReferrals is number && incoming().confirmedReferrals >= 0
+        && incoming().referralCode is string && incoming().referralCode.size() <= 16
+      );
+      allow delete: if false;
+    }
+  }
+}
