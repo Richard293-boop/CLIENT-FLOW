@@ -9,14 +9,13 @@ export const Navbar: React.FC<NavbarProps> = ({ onJoinClick, isRegistered }) => 
   return (
     <header className="sticky top-0 z-30 w-full bg-white/95 backdrop-blur-xs border-b border-slate-100 transition-all">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
-        {/* Wordmark */}
-        <a href="#" className="flex items-center gap-2 group text-decoration-none">
-          <div className="w-8 h-8 rounded-lg bg-[#4DA3FF] flex items-center justify-center text-white font-bold text-base shadow-xs group-hover:bg-[#2a88f5] transition-colors">
-            C
-          </div>
-          <span className="font-semibold text-slate-900 tracking-tight text-lg">
-            Client<span className="text-[#4DA3FF]">Flow</span>
-          </span>
+        {/* Logo */}
+        <a href="#" className="flex items-center group text-decoration-none py-1">
+          <img
+            src="/assets/aistudio/clientflow_logo_clean.png"
+            alt="Client's Flow"
+            className="h-8 sm:h-9 w-auto object-contain transition-transform group-hover:scale-102"
+          />
         </a>
 
         {/* CTA Button */}

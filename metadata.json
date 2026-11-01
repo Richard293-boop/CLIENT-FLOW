@@ -1,6 +1,6 @@
 {
-  "name": "ClientFlow - AI Client-Ops for Freelancers",
-  "description": "ClientFlow handles routine client work automatically and escalates sensitive matters, so freelancers spend more time doing the work and less time managing clients.",
+  "name": "ClientFlow — Autonomous AI Client Ops for High-Ticket Freelancers",
+  "description": "Stop babysitting clients. Upload your project files and context once, and let ClientFlow's autonomous AI agent handle client onboarding, two-way questions, and follow-ups from onboarding to offboarding while you focus on delivery.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

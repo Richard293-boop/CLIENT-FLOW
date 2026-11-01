@@ -12,12 +12,14 @@ export const Footer: React.FC<FooterProps> = ({ onOpenRules, onOpenDbGuide }) =>
       <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-6 text-xs text-center sm:text-left">
         {/* Left: Brand & Privacy note */}
         <div>
-          <div className="flex items-center justify-center sm:justify-start gap-2 mb-1.5">
-            <span className="font-bold text-slate-900 tracking-tight text-sm">
-              Client<span className="text-[#4DA3FF]">Flow</span>
-            </span>
+          <div className="flex items-center justify-center sm:justify-start gap-3 mb-2">
+            <img
+              src="/assets/aistudio/clientflow_logo_clean.png"
+              alt="Client's Flow"
+              className="h-7 sm:h-8 w-auto object-contain"
+            />
             <span className="text-slate-300">|</span>
-            <span className="text-slate-500">AI Client-Ops for Freelancers</span>
+            <span className="text-slate-500 font-medium">AI Client-Ops for Freelancers</span>
           </div>
           <p className="text-slate-400 max-w-md">
             Privacy note: We respect your inbox. No spam, no selling personal data. Unsubscribe anytime.
